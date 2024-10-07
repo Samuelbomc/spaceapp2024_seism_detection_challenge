@@ -1,6 +1,6 @@
 # spaceapp2024_seism_detection_challenge
 
-To use the program its necessary to install the data, output folders and the file Seism_Detect_Final.py. Then, when you run this last program its going to first ask you if you want to analyze data from Mars or from the Moon. Then, its going to ask which dataset to use. Finally, if applicable, it will ask which package to use. The graphs will be stored in the folder ./output/figures/(Celestial body chosen) and the catalog with the detections will be placed at ./output/
+To use the program its necessary to install the data and output folders and the file Seism_Detect_Final.py. Then, when you run this last program its going to first ask you if you want to analyze data from Mars or from the Moon. Then, its going to ask which dataset to use. Finally, if applicable, it will ask which package to use. The graphs will be stored in the folder ./output/figures/(Celestial body chosen) and the catalog with the detections will be placed at ./output/
 
 The Informed Seism Detector (ISD) is a program designed to detect seismic waves that may be hidden within noise from various sources. Its main purpose is to identify the onset of seismic events, not just on Earth but also on other celestial bodies like the Moon and Mars, where space missions have deployed sensors specifically for this task.
 
