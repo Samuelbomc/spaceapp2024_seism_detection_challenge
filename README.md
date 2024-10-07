@@ -1,2 +1,15 @@
 # spaceapp2024_seism_detection_challenge
- 
+
+(To use the program its necessary to install the data and output folders. Then, when you run the program its going to ask you if you want to analyze data from Mars or from the Moon. Then, its going to ask which dataset to use. Finally, if applicable, it will ask which package to use.)
+
+The Informed Seism Detector (ISD) is a program designed to detect seismic waves that may be hidden within noise from various sources. Its main purpose is to identify the onset of seismic events, not just on Earth but also on other celestial bodies like the Moon and Mars, where space missions have deployed sensors specifically for this task.
+
+Given the immense distances in space, transmitting all the data collected by these sensors back to Earth can be highly resource-intensive. The ISD addresses this challenge by analyzing the data locally to detect potential seismic events and sending only the relevant information. This approach reduces the need to transmit vast amounts of raw data across space, optimizing bandwidth usage.
+
+The program adapts its analysis based on the celestial body from which the data is sourced. When analyzing seismic data from Mars, for instance, it focuses on frequencies between 0.1 and 9.9 Hz, using shorter time windows for Short-Term Average (STA) and Long-Term Average (LTA) measurements (120 and 500 seconds, respectively) to detect seismic events. A seismic event is flagged when the ratio of the STA to the LTA exceeds a threshold of 3, indicating a potential seismic disturbance. For lunar data, however, the program uses a narrower frequency range of 0.1 to 3.2 Hz and applies longer STA and LTA windows (500 and 10000 seconds, respectively), with a higher STA/LTA ratio of 4 required for detection. These adjustments reflect the different characteristics of seismic waves on the Moon compared to Mars. Because of this 10000 LTA window, however, the first 10000 seconds of data are not taken into account when searching for seismic events.
+
+Once the data is filtered using a bandpass filter, the ISD applies the STA/LTA algorithm to pinpoint the moments when seismic events may begin. The program further checks the power of the filtered signal to ensure that the detected events are significant. It uses a power threshold parameter to validate the triggers and confirm the presence of a meaningful seismic wave. If the event's power exceeds this threshold, it is considered a valid detection.
+
+In addition to detecting seismic events, the ISD program enhances the visibility of seismic signals through noise filtering and logarithmic scaling, which helps distinguish significant seismic activity from background noise. The logarithmic scaling is particularly useful in visualizing the seismic waves over a wide range of amplitudes, making the events more discernible.
+
+For every detected event, the ISD generates visual outputs, including spectrograms, and saves these as figures for further analysis. It also logs detailed information about the detected events, including the event time, filename, and event ID (evid), into a catalog stored as a CSV file. This catalog and the accompanying visualizations provide a clear record of seismic events, enabling efficient analysis and transmission of data.
