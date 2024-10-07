@@ -5,6 +5,7 @@ To use the program its necessary to install the data (Found here https://wufs.wu
 The implementation of Training_Data.py is pending, we plan to implement in the future a machine learning algorythm that given large databases of noise (Sounds other tha seisms found on celestial bodies surfaces) can then eliminate simmilar behaving patterns on the raw data before its analysis its done. The implementation of a way to detect seisms on the first 10000 seconds on lunar data is also pending. 
 
 // Proyect Description
+
 The Informed Seism Detector (ISD) is a program designed to detect seismic waves that may be hidden within noise from various sources. Its main purpose is to identify the onset of seismic events, not just on Earth but also on other celestial bodies like the Moon and Mars, where space missions have deployed sensors specifically for this task.
 
 Given the immense distances in space, transmitting all the data collected by these sensors back to Earth can be highly resource-intensive. The ISD addresses this challenge by analyzing the data locally to detect potential seismic events and sending only the relevant information. This approach reduces the need to transmit vast amounts of raw data across space, optimizing bandwidth usage.
