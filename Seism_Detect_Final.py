@@ -10,41 +10,72 @@ from scipy import signal
 from matplotlib import cm
 import glob
 import os
-
+# This program detects seisms present on mseed files
 start = False
-while start is False:
-    body = input("The data is from which celestial body? Type Moon or Mars")
-    if body == "Mars":
-        start = True
-        minfreq = 0.1
-        maxfreq = 9.9
-        sta_len = 120
-        lta_len = 500
-        thr_on = 3
-        thr_off = 0.5
-        mseed_directory = './data/mars/test/data/'
+while not start:
+    body = input("The data is from which celestial body? Type 'Moon' or 'Mars': ")
+    
+    if body == "Mars" or body == "Moon":
+        pack = input("Which data set? Type 'Training' or 'Test': ")
+        
+        if body == "Mars":
+            minfreq = 0.1
+            maxfreq = 9.9
+            sta_len = 120
+            lta_len = 500
+            thr_on = 3
+            thr_off = 0.5
+            a = 10000
+            normalize_value = 1e-5 
+            output_catalog_file = './output/catalog_mars.csv'
 
-    elif body == "Moon":
-        start = True
-        minfreq = 0.1
-        maxfreq = 3
-        sta_len = 120
-        lta_len = 600
-        thr_on = 3.4
-        thr_off = 0.5
-        mseed_directory = './data/lunar/training/data/S12_GradeA/'
+            if pack == "Test":
+                mseed_directory = './data/mars/test/data/'
+                start = True
+            elif pack == "Training":
+                mseed_directory = './data/mars/training/data/'
+                start = True
+            else:
+                print("Invalid data set. Please choose 'Training' or 'Test'.")
+                continue
+
+        elif body == "Moon":
+            minfreq = 0.1
+            maxfreq = 3.2
+            sta_len = 500
+            lta_len = 10000
+            thr_on = 4
+            thr_off = 0.5
+            normalize_value = 1e-9
+            a = 3e-18
+            output_catalog_file = './output/catalog_moon.csv'
+
+            if pack == "Training":
+                mseed_directory = './data/lunar/training/data/S12_GradeA/'
+                start = True
+            elif pack == "Test":
+                package = input("Which package? Type 'S12_GradeB', 'S15_GradeA', 'S15_GradeB', 'S16_GradeA' or 'S16_GradeB': ")
+                valid_packages = ['S12_GradeB', 'S15_GradeA', 'S15_GradeB', 'S16_GradeA', 'S16_GradeB']
+                if package in valid_packages:
+                    mseed_directory = f'./data/lunar/training/data/{package}/'
+                    start = True
+                else:
+                    print(f"Invalid package. Please choose one of the following: {', '.join(valid_packages)}")
+                    continue
+            else:
+                print("Invalid data set. Please choose 'Training' or 'Test'.")
+                continue
 
     else:
-        print("Please try again, celestial body not recognized")
-output_figures_dir = './output/figures/'
-output_catalog_file = './output/catalog.csv'
+        print("Invalid celestial body. Please choose 'Moon' or 'Mars'.")
+
+output_figures_dir = f'./output/figures/{body}/'
 
 if not os.path.exists(output_figures_dir):
     os.makedirs(output_figures_dir)  # Create the directory if it doesn't exist
 
 if os.path.exists(output_catalog_file):
     os.remove(output_catalog_file)
-
 
 # Get all .mseed files in the directory
 mseed_files = glob.glob(os.path.join(mseed_directory, '*.mseed'))
@@ -85,31 +116,36 @@ for mseed_file in mseed_files:
         tr_times_filt = tr_filt.times()
         tr_data_filt = tr_filt.data
 
-        # Compute the spectrogram for the original trace
+        # Set the density of the readings
         nperseg = 128
+        # Compute the spectrogram for the original trace
         f, t, sxx = signal.spectrogram(tr_data, tr.stats.sampling_rate, nperseg=nperseg)  # Use original data
 
-        # Run classic STA/LTA
-        cft = classic_sta_lta(tr_data_filt, int(sta_len * tr_filt.stats.sampling_rate), int(lta_len * tr_filt.stats.sampling_rate))
-        on_off = np.array(trigger_onset(cft, thr_on, thr_off))
+        # Check if the length of the filtered trace is sufficient for STA/LTA
+        if len(tr_data_filt) >= (lta_len * tr_filt.stats.sampling_rate):
+            # Run classic STA/LTA
+            cft = classic_sta_lta(tr_data_filt, int(sta_len * tr_filt.stats.sampling_rate), int(lta_len * tr_filt.stats.sampling_rate))
+            on_off = np.array(trigger_onset(cft, thr_on, thr_off))
 
-        # Initialize valid trigger list
-        valid_triggers = []
+            # Initialize valid trigger list
+            valid_triggers = []
 
-        # Iterate through detection times and compile valid triggers
-        for triggers in on_off:
-            valid_triggers.append(triggers)
+            # Calculate the power of the filtered trace
+            power_filt = tr_data_filt ** 2  # Power is the square of the amplitude
 
-        # Convert valid_triggers to a NumPy array for easier indexing
-        valid_triggers = np.array(valid_triggers)
+            # Iterate through detection times and compile valid triggers
+            for triggers in on_off:
+                # Check if the power at the detection time is greater than half of 'a'
+                if any(power_filt[triggers[0] + i] > 0.5*a for i in range(-200, 201)):
+                    valid_triggers.append(triggers)
 
-        # Calculate the mean position of triggers
-        if valid_triggers.size > 0:  # Use .size to check if there are any triggers
-            trigger_times = tr_times[valid_triggers[:, 0].astype(int)]  # Ensure integer indexing
-            mean_trigger_time = np.mean(trigger_times)
+            # Convert valid_triggers to a NumPy array for easier indexing
+            valid_triggers = np.array(valid_triggers)
+            
         else:
-            print('No valid triggers found.')
-            mean_trigger_time = None  # Ensure this is defined
+            print(f"Skipping STA/LTA for {fname}: Not enough data points.")
+            continue  # Skip to the next file
+
 
         # Create a 2x3 grid for 6 total plots
         fig, axs = plt.subplots(2, 3, figsize=(20, 10))
@@ -139,37 +175,40 @@ for mseed_file in mseed_files:
         ax_bhu.legend()
 
         # Ensure all values are positive for log scale (using filtered data)
-        tr_data_filt_positive = tr_data_filt - np.min(tr_data_filt) + 1e-5 
+        tr_data_filt_positive = tr_data_filt - np.min(tr_data_filt) + normalize_value
         # Plotting the Log Scale Trace graph
         ax_bhw = axs[0, 2]
         ax_bhw.plot(tr_times_filt, tr_data_filt_positive, label='Seismogram Data', color='green')  # Using filtered data
-        ax_bhw.set_yscale('log') 
-        for triggers in valid_triggers:
-            ax_bhw.axvline(x=tr_times[triggers[0]], color='red', label='Detection' if triggers[0] == valid_triggers[0][0] else "")
-            ax_bhw.axvline(x=tr_times[triggers[1]], color='purple', label='Trig. Off' if triggers[1] == valid_triggers[0][1] else "")
+        ax_bhw.set_yscale('log')  # Set log scale
         ax_bhw.set_xlim([min(tr_times), max(tr_times)])  # Fit entire activity
-        ax_bhw.set_ylabel(f'Log {label_y}')
+        ax_bhw.set_ylabel(label_y)
         ax_bhw.set_xlabel('Time (s)')
         ax_bhw.set_title('Trace (Log Scale)', fontweight='bold')  # Updated title
         ax_bhw.legend()
 
-        # Spectrogram 1 (original)
-        ax2_bhv = axs[1, 0]
-        vals_bhv = ax2_bhv.pcolormesh(t, f, sxx, cmap=cm.jet, vmax=10000)  # Using original data
-        ax2_bhv.set_xlim([min(tr_times), max(tr_times)])  # Use original trace time
-        ax2_bhv.set_xlabel('Time (s)', fontweight='bold')
-        ax2_bhv.set_ylabel('Frequency (Hz)', fontweight='bold')
-        ax2_bhv.set_title('Spectrogram', fontweight='bold')  # Added title
-        for triggers in valid_triggers:
-            ax2_bhv.axvline(x=tr_times[triggers[0]], color='red')
-            ax2_bhv.axvline(x=tr_times[triggers[1]], color='purple')
-        cbar_bhv = plt.colorbar(vals_bhv, ax=ax2_bhv, orientation='horizontal')
-        cbar_bhv.set_label(label_cbar, fontweight='bold')
+        # Plotting the Spectrogram
+        ax_h = axs[1, 0]
+        im = ax_h.pcolormesh(t, f, 10 * np.log10(sxx), shading='gouraud', cmap=cm.viridis)
+        ax_h.set_ylabel('Frequency (Hz)')
+        ax_h.set_xlabel('Time (s)')
+        ax_h.set_title('Spectrogram', fontweight='bold')  # Updated title
+        fig.colorbar(im, ax=ax_h, label='Intensity (dB)')
 
-        # Spectrogram 2 (using filtered trace)
+        # Plotting STA/LTA
+        ax_sta_lta = axs[1, 1]
+        ax_sta_lta.plot(tr_times_filt, cft, color='blue', label='STA/LTA')
+        ax_sta_lta.axhline(thr_on, color='red', linestyle='--', label='Threshold On')
+        ax_sta_lta.axhline(thr_off, color='orange', linestyle='--', label='Threshold Off')
+        ax_sta_lta.set_xlim([min(tr_times), max(tr_times)])  # Fit entire activity
+        ax_sta_lta.set_ylim([-0.1, 3.5])
+        ax_sta_lta.set_ylabel('STA/LTA')
+        ax_sta_lta.set_xlabel('Time (s)')
+        ax_sta_lta.set_title('STA/LTA', fontweight='bold')  # Updated title
+        ax_sta_lta.legend()
+
         f_bhu, t_bhu, sxx_bhu = signal.spectrogram(tr_data_filt, tr_filt.stats.sampling_rate, nperseg=nperseg)  # Using filtered data
-        ax2_bhu = axs[1, 1]
-        vals_bhu = ax2_bhu.pcolormesh(t_bhu, f_bhu, sxx_bhu, cmap=cm.jet, vmax=10000)  # Using filtered data
+        ax2_bhu = axs[1, 2]
+        vals_bhu = ax2_bhu.pcolormesh(t_bhu, f_bhu, sxx_bhu, cmap=cm.jet, vmax = a)  # Using filtered data
         ax2_bhu.set_xlim([min(tr_times_filt), max(tr_times_filt)])
         ax2_bhu.set_xlabel('Time (s)', fontweight='bold')
         ax2_bhu.set_ylabel('Frequency (Hz)', fontweight='bold')
@@ -180,27 +219,11 @@ for mseed_file in mseed_files:
         cbar_bhu = plt.colorbar(vals_bhu, ax=ax2_bhu, orientation='horizontal')
         cbar_bhu.set_label(label_cbar, fontweight='bold')
 
-        # Spectrogram 3 (Log scale)
-        ax2_bhw = axs[1, 2]
-        sxx_bhw_log = np.log(sxx + 1e-10)  # Avoid log(0)
-        vals_bhw = ax2_bhw.pcolormesh(t, f, sxx_bhu, cmap=cm.jet, vmax=10000)  # Using log scale
-        ax2_bhw.set_xlim([min(tr_times), max(tr_times)])  # Use original trace time
-        ax2_bhw.set_xlabel('Time (s)', fontweight='bold')
-        ax2_bhw.set_ylabel('Frequency (Hz)', fontweight='bold')
-        ax2_bhw.set_title('Spectrogram (Log Scale)', fontweight='bold')  # Added title
-        for triggers in valid_triggers:
-            ax2_bhw.axvline(x=tr_times[triggers[0]], color='red')
-            ax2_bhw.axvline(x=tr_times[triggers[1]], color='purple')
-        cbar_bhw = plt.colorbar(vals_bhw, ax=ax2_bhw, orientation='horizontal')
-        cbar_bhw.set_label('Log Power', fontweight='bold')
-
         plt.tight_layout()
-
-        # Save the plots to a file
-        plt.savefig(os.path.join(output_figures_dir, f'{evid}_spectrogram.png'), dpi=300)
-        plt.close()
+        plt.savefig(os.path.join(output_figures_dir, f'{evid}_spectrogram.png'))  # Save the figure
+        plt.close(fig)
         detections = []
-        if mean_trigger_time is not None:  # Only append if a mean trigger time is available
+        if valid_triggers is not None:  # Only append if a mean trigger time is available
             for triggers in valid_triggers:
                 event_time = starttime + datetime.timedelta(seconds=tr_times[triggers[0]])
                 detection_data = {
@@ -219,6 +242,5 @@ for mseed_file in mseed_files:
                 else:
                     detection_df.to_csv(output_catalog_file, mode='w', header=True, index=False)
                     header_written = True
-
     except Exception as e:
-        print(f'Error processing file {full_path}: {e}')
+        print(f"Error processing file {fname}: {str(e)}")
