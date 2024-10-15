@@ -179,7 +179,7 @@ for mseed_file in mseed_files:
         ax2_sta_lta.axhline(thr_on, color='red', linestyle='--', label='Threshold On')
         ax2_sta_lta.axhline(thr_off, color='orange', linestyle='--', label='Threshold Off')
         ax2_sta_lta.set_xlim([min(tr_times), max(tr_times)])
-        ax2_sta_lta.set_ylim([-0.1, 3.5])
+        ax2_sta_lta.set_ylim([-0.1, 10])
         ax2_sta_lta.set_ylabel('STA/LTA')
         ax2_sta_lta.set_xlabel('Time (s)')
         ax2_sta_lta.set_title('STA/LTA', fontweight='bold')
@@ -224,3 +224,4 @@ for mseed_file in mseed_files:
 
     except Exception as e:
         print(f"Skipping {fname}: {e}")
+
