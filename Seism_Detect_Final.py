@@ -44,8 +44,8 @@ while not start:
         elif body == "Moon":
             minfreq = 0.1
             maxfreq = 3.2
-            sta_len = 500
-            lta_len = 10000
+            sta_len = 104
+            lta_len = 543
             thr_on = 4
             thr_off = 0.5
             normalize_value = 1e-9
