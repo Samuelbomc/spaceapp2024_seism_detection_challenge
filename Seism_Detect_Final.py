@@ -10,6 +10,7 @@ from scipy import signal
 from matplotlib import cm
 import glob
 import os
+from scipy.ndimage import gaussian_filter1d
 
 start = False
 nperseg = 256
@@ -112,7 +113,8 @@ for mseed_file in mseed_files:
         tr_filt = st_filt.traces[0].copy()
         tr_times_filt = tr_filt.times()
         tr_data_filt = tr_filt.data
-
+        tr_data_filt = gaussian_filter1d(tr_data_filt, sigma=1)
+        
         f, t, sxx = signal.spectrogram(tr_data, tr.stats.sampling_rate, nperseg=nperseg)
 
         if len(tr_data_filt) >= (lta_len * tr_filt.stats.sampling_rate):
