@@ -23,8 +23,8 @@ while not start:
         if body == "Mars":
             minfreq = 0.1
             maxfreq = 9.9
-            sta_len = 120
-            lta_len = 500
+            sta_len = 104
+            lta_len = 543
             thr_on = 3
             thr_off = 0.5
             a = 10000
@@ -44,9 +44,9 @@ while not start:
         elif body == "Moon":
             minfreq = 0.1
             maxfreq = 3.2
-            sta_len = 104
-            lta_len = 543
-            thr_on = 4
+            sta_len = 511
+            lta_len = 9580
+            thr_on = 3
             thr_off = 0.5
             normalize_value = 1e-9
             a = 3e-18
