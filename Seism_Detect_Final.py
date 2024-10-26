@@ -1,20 +1,20 @@
-from obspy.signal.invsim import cosine_taper 
-from obspy.signal.filter import highpass
 from obspy.signal.trigger import classic_sta_lta, trigger_onset
+from scipy.ndimage import gaussian_filter1d
+import numpy as np
+from obspy import read
+from scipy import signal
+from matplotlib import cm
 import numpy as np
 import pandas as pd
 import datetime
-from obspy import read
 import matplotlib.pyplot as plt
-from scipy import signal
-from matplotlib import cm
 import glob
 import os
-from scipy.ndimage import gaussian_filter1d
+import noisereduce as nr
 
 start = False
 nperseg = 256
-
+plots = input("Create plots? Type ´Y´ or ´N´: ")
 while not start:
     body = input("The data is from which celestial body? Type 'Moon' or 'Mars': ")
     
@@ -24,11 +24,12 @@ while not start:
         if body == "Mars":
             minfreq = 0.1
             maxfreq = 9.9
-            sta_len = 104
-            lta_len = 543
+            sta_len = 121
+            lta_len = 495
             thr_on = 3
             thr_off = 0.5
             a = 10000
+            spl = 100000
             normalize_value = 1e-5 
             output_catalog_file = './output/catalog_mars.csv'
 
@@ -50,6 +51,7 @@ while not start:
             thr_on = 3
             thr_off = 0.5
             normalize_value = 1e-9
+            spl = 50000
             a = 3e-18
             output_catalog_file = './output/catalog_moon.csv'
 
@@ -90,17 +92,30 @@ for mseed_file in mseed_files:
 
     try:
         st = read(mseed_file)
-        print(f'Analyzing file: {os.path.basename(mseed_file)}')
 
         st[0].stats
         fname = os.path.basename(mseed_file)
-
+           
         tr = st.traces[0].copy()
         tr_times = tr.times()
         tr_data = tr.data
-
         starttime = tr.stats.starttime.datetime
+        st_filt = st.copy()
+        st_filt.filter('bandpass', freqmin=minfreq, freqmax=maxfreq)
+        tr_filt = st_filt.traces[0].copy()
+        tr_times_filt = tr_filt.times()
+        tr_data_filt = tr_filt.data
 
+        tr_data_filt = gaussian_filter1d(tr_data_filt, sigma=1)
+        tr_data_filt = nr.reduce_noise(
+            y=tr_data_filt, 
+            sr=spl,
+            n_fft=2048,
+            win_length=1024,
+            hop_length=512,
+            n_std_thresh_stationary=2
+        )
+        tr_filt.data = tr_data_filt
         if tr.stats.channel.endswith('H'):
             label_y = 'Amplitude (Filt. Cts./s)'
             label_cbar = 'Power ((Filt. Cts./s)^2/sqrt(Hz))'
@@ -108,14 +123,9 @@ for mseed_file in mseed_files:
             label_y = 'Velocity (m/s)'
             label_cbar = 'Power ((m/s)^2/sqrt(Hz))'
 
-        st_filt = st.copy()
-        st_filt.filter('bandpass', freqmin=minfreq, freqmax=maxfreq)
-        tr_filt = st_filt.traces[0].copy()
-        tr_times_filt = tr_filt.times()
-        tr_data_filt = tr_filt.data
-        tr_data_filt = gaussian_filter1d(tr_data_filt, sigma=1)
-        
-        f, t, sxx = signal.spectrogram(tr_data, tr.stats.sampling_rate, nperseg=nperseg)
+
+            f, t, sxx = signal.spectrogram(tr_data_filt, tr.stats.sampling_rate, nperseg=nperseg)
+
 
         if len(tr_data_filt) >= (lta_len * tr_filt.stats.sampling_rate):
             cft = classic_sta_lta(tr_data_filt, int(sta_len * tr_filt.stats.sampling_rate), int(lta_len * tr_filt.stats.sampling_rate))
@@ -135,74 +145,75 @@ for mseed_file in mseed_files:
             print(f"Skipping STA/LTA for {fname}: Not enough data points.")
             continue
 
-        fig, axs = plt.subplots(2, 3, figsize=(20, 10))
+        if plots == "Y" or plots == "y":
+            fig, axs = plt.subplots(2, 3, figsize=(20, 10))
 
-        ax_v = axs[0, 0]
-        ax_v.plot(tr_times, tr_data, label='Seismogram Data')
-        for triggers in valid_triggers:
-            ax_v.axvline(x=tr_times[triggers[0]], color='red', label='Detection' if triggers[0] == valid_triggers[0][0] else "")
-            ax_v.axvline(x=tr_times[triggers[1]], color='purple', label='Trig. Off' if triggers[1] == valid_triggers[0][1] else "")
-        ax_v.set_xlim([min(tr_times), max(tr_times)])
-        ax_v.set_ylabel(label_y)
-        ax_v.set_xlabel('Time (s)')
-        ax_v.set_title('Trace', fontweight='bold')
-        ax_v.legend()
+            ax_v = axs[0, 0]
+            ax_v.plot(tr_times, tr_data, label='Seismogram Data')
+            for triggers in valid_triggers:
+                ax_v.axvline(x=tr_times[triggers[0]], color='red', label='Detection' if triggers[0] == valid_triggers[0][0] else "")
+                ax_v.axvline(x=tr_times[triggers[1]], color='purple', label='Trig. Off' if triggers[1] == valid_triggers[0][1] else "")
+            ax_v.set_xlim([min(tr_times), max(tr_times)])
+            ax_v.set_ylabel(label_y)
+            ax_v.set_xlabel('Time (s)')
+            ax_v.set_title('Trace', fontweight='bold')
+            ax_v.legend()
 
-        ax_u = axs[0, 1]
-        ax_u.plot(tr_times, tr_data_filt, label='Seismogram Data (Filtered)', color='orange')
-        for triggers in valid_triggers:
-            ax_u.axvline(x=tr_times[triggers[0]], color='red', label='Detection' if triggers[0] == valid_triggers[0][0] else "")
-            ax_u.axvline(x=tr_times[triggers[1]], color='purple', label='Trig. Off' if triggers[1] == valid_triggers[0][1] else "")
-        ax_u.set_xlim([min(tr_times), max(tr_times)])
-        ax_u.set_ylabel(label_y)
-        ax_u.set_xlabel('Time (s)')
-        ax_u.set_title('Trace (Filtered)', fontweight='bold')
-        ax_u.legend()
+            ax_u = axs[0, 1]
+            ax_u.plot(tr_times, tr_data_filt, label='Seismogram Data (Filtered)', color='orange')
+            for triggers in valid_triggers:
+                ax_u.axvline(x=tr_times[triggers[0]], color='red', label='Detection' if triggers[0] == valid_triggers[0][0] else "")
+                ax_u.axvline(x=tr_times[triggers[1]], color='purple', label='Trig. Off' if triggers[1] == valid_triggers[0][1] else "")
+            ax_u.set_xlim([min(tr_times), max(tr_times)])
+            ax_u.set_ylabel(label_y)
+            ax_u.set_xlabel('Time (s)')
+            ax_u.set_title('Trace (Filtered)', fontweight='bold')
+            ax_u.legend()
 
-        tr_data_filt_positive = tr_data_filt - np.min(tr_data_filt) + normalize_value
-        ax_w = axs[0, 2]
-        ax_w.plot(tr_times_filt, tr_data_filt_positive, label='Seismogram Data', color='green')
-        ax_w.set_yscale('log')
-        ax_w.set_xlim([min(tr_times), max(tr_times)])
-        ax_w.set_ylabel(label_y)
-        ax_w.set_xlabel('Time (s)')
-        ax_w.set_title('Trace (Log Scale)', fontweight='bold')
-        ax_w.legend()
+            tr_data_filt_positive = tr_data_filt - np.min(tr_data_filt) + normalize_value
+            ax_w = axs[0, 2]
+            ax_w.plot(tr_times_filt, tr_data_filt_positive, label='Seismogram Data', color='green')
+            ax_w.set_yscale('log')
+            ax_w.set_xlim([min(tr_times), max(tr_times)])
+            ax_w.set_ylabel(label_y)
+            ax_w.set_xlabel('Time (s)')
+            ax_w.set_title('Trace (Log Scale)', fontweight='bold')
+            ax_w.legend()
 
-        ax2_h = axs[1, 0]
-        im = ax2_h.pcolormesh(t, f, 10 * np.log10(sxx), shading='gouraud', cmap=cm.viridis)
-        ax2_h.set_ylabel('Frequency (Hz)')
-        ax2_h.set_xlabel('Time (s)')
-        ax2_h.set_title('Spectrogram', fontweight='bold')
-        fig.colorbar(im, ax=ax2_h, label='Intensity (dB)')
+            ax2_h = axs[1, 0]
+            im = ax2_h.pcolormesh(t, f, 10 * np.log10(sxx), shading='gouraud', cmap=cm.viridis)
+            ax2_h.set_ylabel('Frequency (Hz)')
+            ax2_h.set_xlabel('Time (s)')
+            ax2_h.set_title('Spectrogram', fontweight='bold')
+            fig.colorbar(im, ax=ax2_h, label='Intensity (dB)')
 
-        ax2_sta_lta = axs[1, 1]
-        ax2_sta_lta.plot(tr_times_filt, cft, color='blue', label='STA/LTA')
-        ax2_sta_lta.axhline(thr_on, color='red', linestyle='--', label='Threshold On')
-        ax2_sta_lta.axhline(thr_off, color='orange', linestyle='--', label='Threshold Off')
-        ax2_sta_lta.set_xlim([min(tr_times), max(tr_times)])
-        ax2_sta_lta.set_ylim([-0.1, 10])
-        ax2_sta_lta.set_ylabel('STA/LTA')
-        ax2_sta_lta.set_xlabel('Time (s)')
-        ax2_sta_lta.set_title('STA/LTA', fontweight='bold')
-        ax2_sta_lta.legend()
+            ax2_sta_lta = axs[1, 1]
+            ax2_sta_lta.plot(tr_times_filt, cft, color='blue', label='STA/LTA')
+            ax2_sta_lta.axhline(thr_on, color='red', linestyle='--', label='Threshold On')
+            ax2_sta_lta.axhline(thr_off, color='orange', linestyle='--', label='Threshold Off')
+            ax2_sta_lta.set_xlim([min(tr_times), max(tr_times)])
+            ax2_sta_lta.set_ylim([-0.1, 10])
+            ax2_sta_lta.set_ylabel('STA/LTA')
+            ax2_sta_lta.set_xlabel('Time (s)')
+            ax2_sta_lta.set_title('STA/LTA', fontweight='bold')
+            ax2_sta_lta.legend()
 
-        ax2 = axs[1, 2]
-        vals2 = ax2.pcolormesh(t, f, sxx, cmap=cm.jet, shading='auto', vmax=a)
-        ax2.set_xlim([min(t), max(t)])
-        if np.all(f > 0):
-            ax2.set_yscale('log')
-        ax2.set_ylabel('Freq (Hz)')
-        ax2.set_xlabel('Time (s)')
-        ax2.set_title('Spectrogram', fontweight='bold')
-        fig.colorbar(vals2, ax=ax2, label=label_cbar)
+            ax2 = axs[1, 2]
+            vals2 = ax2.pcolormesh(t, f, sxx, cmap=cm.jet, shading='auto', vmax=a)
+            ax2.set_xlim([min(t), max(t)])
+            if np.all(f > 0):
+                ax2.set_yscale('log')
+            ax2.set_ylabel('Freq (Hz)')
+            ax2.set_xlabel('Time (s)')
+            ax2.set_title('Spectrogram', fontweight='bold')
+            fig.colorbar(vals2, ax=ax2, label=label_cbar)
 
 
-        output_file_path = os.path.join(output_figures_dir, fname + '_trace.png')
-        fig.suptitle(f'{evid},  Start: {starttime}', fontweight='bold', fontsize=20)
-        plt.tight_layout()
-        plt.savefig(output_file_path, bbox_inches='tight')
-        plt.close()
+            output_file_path = os.path.join(output_figures_dir, fname + '_trace.png')
+            fig.suptitle(f'{evid},  Start: {starttime}', fontweight='bold', fontsize=20)
+            plt.tight_layout()
+            plt.savefig(output_file_path, bbox_inches='tight')
+            plt.close()
 
         detections = []
         if valid_triggers is not None:
@@ -226,4 +237,3 @@ for mseed_file in mseed_files:
 
     except Exception as e:
         print(f"Skipping {fname}: {e}")
-
