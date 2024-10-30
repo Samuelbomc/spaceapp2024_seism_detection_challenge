@@ -14,7 +14,7 @@ import noisereduce as nr
 
 start = False
 nperseg = 256
-plots = input("Create plots? Type ´Y´ or ´N´: ")
+plots = input("Create plots? Type 'Y' or 'N': ")
 while not start:
     body = input("The data is from which celestial body? Type 'Moon' or 'Mars': ")
     
@@ -24,13 +24,20 @@ while not start:
         if body == "Mars":
             minfreq = 0.1
             maxfreq = 9.9
-            sta_len = 121
-            lta_len = 495
-            thr_on = 3
-            thr_off = 0.5
+            sta_len = 60
+            lta_len = 250
+            thr_on = 1.5
+            thr_off = 1
             a = 10000
-            spl = 100000
-            normalize_value = 1e-5 
+            spl = 50000
+            normalize_value = 1e-5
+            noise_mean = 90
+            noise_std = 18
+            min_trigger_difference = 100
+            n_fft=2048
+            win_length=1024
+            hop_length=512
+            n_std_thresh_stationary=2
             output_catalog_file = './output/catalog_mars.csv'
 
             if pack == "Test":
@@ -46,13 +53,20 @@ while not start:
         elif body == "Moon":
             minfreq = 0.1
             maxfreq = 3.2
-            sta_len = 585
-            lta_len = 9398
-            thr_on = 3
-            thr_off = 0.5
+            sta_len = 100
+            lta_len = 1000
+            thr_on = 1.5
+            thr_off = 1
             normalize_value = 1e-9
             spl = 50000
             a = 3e-18
+            noise_mean = 5e-10
+            noise_std = 1e-10
+            min_trigger_difference = 3000
+            n_fft=2048,
+            win_length=1024,
+            hop_length=512,
+            n_std_thresh_stationary=2
             output_catalog_file = './output/catalog_moon.csv'
 
             if pack == "Training":
@@ -105,16 +119,44 @@ for mseed_file in mseed_files:
         tr_filt = st_filt.traces[0].copy()
         tr_times_filt = tr_filt.times()
         tr_data_filt = tr_filt.data
-
         tr_data_filt = gaussian_filter1d(tr_data_filt, sigma=1)
         tr_data_filt = nr.reduce_noise(
-            y=tr_data_filt, 
-            sr=spl,
-            n_fft=2048,
-            win_length=1024,
-            hop_length=512,
-            n_std_thresh_stationary=2
+            y = tr_data_filt, 
+            sr = spl,
+            n_fft = n_fft,
+            win_length = win_length,
+            hop_length = hop_length,
+            n_std_thresh_stationary = n_std_thresh_stationary
         )
+        window_size = 100
+        std_threshold = 2 
+
+        adjusted_data = tr_data_filt.copy()
+
+        i = window_size
+        while i < len(tr_data_filt) - window_size:
+
+            local_window = np.concatenate((tr_data_filt[i - window_size:i], tr_data_filt[i + 1:i + window_size + 1]))
+            local_mean = np.mean(local_window)
+            local_std = np.std(local_window)
+
+            if abs(tr_data_filt[i] - local_mean) > std_threshold * local_std:
+
+                start = i
+                while i < len(tr_data_filt) - window_size and abs(tr_data_filt[i] - local_mean) > std_threshold * local_std:
+                    i += 1
+                end = i  
+
+                adjusted_data[start:end] = (tr_data_filt[start - 1] + tr_data_filt[end]) / 2
+            else:
+                i += 1
+
+        tr_data_filt = adjusted_data
+
+        noise = np.random.normal(noise_mean, noise_std, size=tr_data_filt.shape)
+        tr_data_filt += noise
+
+        
         tr_filt.data = tr_data_filt
         if tr.stats.channel.endswith('H'):
             label_y = 'Amplitude (Filt. Cts./s)'
@@ -123,8 +165,7 @@ for mseed_file in mseed_files:
             label_y = 'Velocity (m/s)'
             label_cbar = 'Power ((m/s)^2/sqrt(Hz))'
 
-
-            f, t, sxx = signal.spectrogram(tr_data_filt, tr.stats.sampling_rate, nperseg=nperseg)
+        f, t, sxx = signal.spectrogram(tr_data_filt, tr.stats.sampling_rate, nperseg=nperseg)
 
 
         if len(tr_data_filt) >= (lta_len * tr_filt.stats.sampling_rate):
@@ -133,11 +174,17 @@ for mseed_file in mseed_files:
 
             valid_triggers = []
 
-            power_filt = tr_data_filt ** 2
+            power = tr_data ** 2
 
             for triggers in on_off:
-                if any(power_filt[triggers[0] + i] > 0.5*a for i in range(-200, 201)):
-                    valid_triggers.append(triggers)
+                start_idx, end_idx = triggers
+                num = 0
+                for i in range (0, 200):
+                    if power[triggers[0] + i] > 0.8*a:
+                        num += 1
+                if num >= 10:
+                    if (end_idx - start_idx) >= min_trigger_difference:
+                        valid_triggers.append(triggers)
 
             valid_triggers = np.array(valid_triggers)
             
