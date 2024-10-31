@@ -14,13 +14,13 @@ import random
 import noisereduce as nr
 
 lowest_difference = 1000000000
-randomness = 0
+randomness = 20
 nperseg = 258
 knowledge = []
 difference_value = 0
 plots = input("Draw plots? type Y or N: ")
 
-def data_analysis(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_catalog_file, minfreq, maxfreq, normalize_value, a, spl):
+def data_analysis(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_catalog_file, minfreq, maxfreq, normalize_value, a, spl, noise_mean, noise_std, min_trigger_difference):
     detections = []
     output_figures_dir = f'./output/figures/{body}/'
     global plots
@@ -40,7 +40,7 @@ def data_analysis(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, outp
 
             st[0].stats
             fname = os.path.basename(mseed_file)
-
+            
             tr = st.traces[0].copy()
             tr_times = tr.times()
             tr_data = tr.data
@@ -50,16 +50,45 @@ def data_analysis(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, outp
             tr_filt = st_filt.traces[0].copy()
             tr_times_filt = tr_filt.times()
             tr_data_filt = tr_filt.data
-
             tr_data_filt = gaussian_filter1d(tr_data_filt, sigma=1)
             tr_data_filt = nr.reduce_noise(
-                y=tr_data_filt, 
-                sr=spl,
-                n_fft=2048,
-                win_length=1024,
-                hop_length=512,
-                n_std_thresh_stationary=2
+                y = tr_data_filt, 
+                sr = spl,
+                n_fft = 2048,
+                win_length = 1024,
+                hop_length = 512,
+                n_std_thresh_stationary = 2
             )
+            window_size = 100
+            std_threshold = 2 
+
+            adjusted_data = tr_data_filt.copy()
+
+            i = window_size
+            while i < len(tr_data_filt) - window_size:
+
+                local_window = np.concatenate((tr_data_filt[i - window_size:i], tr_data_filt[i + 1:i + window_size + 1]))
+                local_mean = np.mean(local_window)
+                local_std = np.std(local_window)
+
+                if abs(tr_data_filt[i] - local_mean) > std_threshold * local_std:
+
+                    start = i
+                    while i < len(tr_data_filt) - window_size and abs(tr_data_filt[i] - local_mean) > std_threshold * local_std:
+                        i += 1
+                    end = i  
+
+                    adjusted_data[start:end] = (tr_data_filt[start - 1] + tr_data_filt[end]) / 2
+                else:
+                    i += 1
+
+            tr_data_filt = adjusted_data
+
+            noise = np.random.normal(noise_mean, noise_std, size=tr_data_filt.shape)
+            tr_data_filt += noise
+
+            
+            tr_filt.data = tr_data_filt
 
             if tr.stats.channel.endswith('H'):
                 label_y = 'Amplitude (Filt. Cts./s)'
@@ -76,15 +105,25 @@ def data_analysis(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, outp
                 cft = classic_sta_lta(tr_data_filt, int(sta_len * tr_filt.stats.sampling_rate), int(lta_len * tr_filt.stats.sampling_rate))
                 on_off = np.array(trigger_onset(cft, thr_on, thr_off))
 
+                cft = classic_sta_lta(tr_data_filt, int(sta_len * tr_filt.stats.sampling_rate), int(lta_len * tr_filt.stats.sampling_rate))
+                on_off = np.array(trigger_onset(cft, thr_on, thr_off))
+
                 valid_triggers = []
 
-                power_filt = tr_data_filt ** 2
+                power = tr_data ** 2
 
                 for triggers in on_off:
-                    if any(power_filt[triggers[0] + i] > 0.5 * a for i in range(-50, 300)):
-                        valid_triggers.append(triggers)
+                    start_idx, end_idx = triggers
+                    num = 0
+                    for i in range (0, 200):
+                        if power[triggers[0] + i] > 0.8*a:
+                            num += 1
+                    if num >= 10:
+                        if (end_idx - start_idx) >= min_trigger_difference:
+                            valid_triggers.append(triggers)
 
                 valid_triggers = np.array(valid_triggers)
+                
             else:
                 print(f"Skipping STA/LTA for {fname}: Not enough data points.")
                 continue
@@ -221,16 +260,15 @@ def save_training_data(sta_len, lta_len, thr_on, body, output_training_file):
     os.makedirs(os.path.dirname(output_training_file), exist_ok=True)
     training_df.to_csv(output_training_file, mode='a', header=not os.path.exists(output_training_file), index=False)
 
-def best_value(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_catalog_file, minfreq, maxfreq, normalize_value, a, spl):
+def best_value(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_catalog_file, minfreq, maxfreq, normalize_value, a, spl, noise_mean, noise_std, min_trigger_difference):
     global difference_value
     global lowest_difference
     global randomness
     loop = True
-    data3 = [sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_catalog_file, minfreq, maxfreq, normalize_value, a, spl]
+    data3 = [sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_catalog_file, minfreq, maxfreq, normalize_value, a, spl, noise_mean, noise_std, min_trigger_difference]
 
     while loop is True:
-        data_analysis(data3[0], data3[1], data3[2], data3[3], data3[4], data3[5], data3[6], data3[7], data3[8], data3[9], data3[10], data[11])
-
+        data_analysis(data3[0], data3[1], data3[2], data3[3], data3[4], data3[5], data3[6], data3[7], data3[8], data3[9], data3[10], data[11], data[12], data[13], data[14])
         if body == "Moon":
             catalog_path = './data/lunar/training/catalogs/apollo12_catalog_GradeA_final.csv'
         else:
@@ -271,18 +309,17 @@ def best_value(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_
                     if closest_diff < float('inf'):
                         difference_values[evid] = closest_diff
 
-        # Now, sum up the differences for the overall difference_value
         difference_value += sum(difference_values.values())
 
         if body == "Moon":
-            pen = 1000
+            pen = 5000
         else:
-            pen = 50
+            pen = 100
         difference_value += abs(len(st) - len(st_output)) * pen
         if body == "Moon":
-            max_difference = 1000
+            max_difference = 10000
         else:
-            max_difference = 20
+            max_difference = 232
         if difference_value < max_difference: 
             optimal_lta_len = lta_len
             optimal_sta_len = sta_len
@@ -291,6 +328,7 @@ def best_value(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_
             optimal_values = [optimal_sta_len, optimal_lta_len, optimal_thr_on]
             print(f'Lowest difference is {lowest_difference}, with an sta len of {optimal_sta_len}, an lta len of {optimal_lta_len} and a thr on of {optimal_thr_on}')
             save_training_data(optimal_sta_len, optimal_lta_len, optimal_thr_on, body, output_training_file)
+            print(f"There are {abs(len(st) - len(st_output))} more or less detections than there should be")
             loop = False
         else:
             sta_len1 = sta_len
@@ -298,7 +336,7 @@ def best_value(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_
             thr_on1 = thr_on
             sta_len += random.randint(-randomness, randomness)
             lta_len += random.randint(-randomness, randomness)
-            thr_on += random.randint(-1, 1)
+            thr_on += (random.randint(-4, 10))/10
             if ([sta_len, lta_len, thr_on] in knowledge):
                 while ([sta_len, lta_len, thr_on] in knowledge):
                     sta_len = sta_len1
@@ -306,7 +344,7 @@ def best_value(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_
                     thr_on = thr_on1
                     sta_len += random.randint(-randomness, randomness)
                     lta_len += random.randint(-randomness, randomness)
-                    thr_on += random.randint(-1, 1)
+                    thr_on += (random.randint(-4, 10))/10
             data3[0] = sta_len
             data3[1] = lta_len
             data3[2] = thr_on
@@ -317,6 +355,7 @@ def best_value(sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_
                 optimal_sta_len = sta_len
                 optimal_thr_on = thr_on
                 print(f'Lowest difference is {lowest_difference}, with an sta len of {optimal_sta_len}, an lta len of {optimal_lta_len} and a thr on of {optimal_thr_on}')
+                print(f"There are {abs(len(st) - len(st_output))} more or less detections than there should be")
             sta_len = sta_len1
             lta_len = lta_len1
             thr_on = thr_on1
@@ -337,15 +376,16 @@ def data_base():
             if body == "Mars":
                 minfreq = 0.1
                 maxfreq = 9.9
-                sta_len += 121
-                lta_len += 495
-                thr_on += 3
-                thr_off += 0.5
+                sta_len = 60
+                lta_len = 250
+                thr_on = 1.5
+                thr_off = 1
                 a = 10000
-                randomness += 100
-                normalize_value = 1e-5 
-                spl = 100000
-                # sta_len 121, lta_len 495, thr on 3
+                spl = 50000
+                normalize_value = 1e-5
+                noise_mean = 90
+                noise_std = 18
+                min_trigger_difference = 100
                 output_catalog_file = './output/catalog_mars.csv'
                 mseed_directory = './data/mars/training/data/'
                 start = True
@@ -353,15 +393,16 @@ def data_base():
             elif body == "Moon":
                 minfreq = 0.1
                 maxfreq = 3.2
-                sta_len = 511
-                lta_len = 9580
-                thr_on = 3
-                thr_off = 0.5
-                randomness += 50
+                sta_len = 100
+                lta_len = 1000
+                thr_on = 1.5
+                thr_off = 1
                 normalize_value = 1e-9
                 spl = 50000
-                # sta len 519, lta len 9599 thr on of 4
                 a = 3e-18
+                noise_mean = 5e-10
+                noise_std = 1e-10
+                min_trigger_difference = 3000
                 output_catalog_file = './output/catalog_moon.csv'
                 mseed_directory = './data/lunar/training/data/S12_GradeA/'
                 start = True
@@ -370,8 +411,8 @@ def data_base():
                 print("Invalid celestial body. Please choose 'Moon' or 'Mars'.")
     
     
-    return [sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_catalog_file, minfreq, maxfreq, normalize_value, a, spl]
+    return [sta_len, lta_len, thr_on, thr_off, body, mseed_directory, output_catalog_file, minfreq, maxfreq, normalize_value, a, spl, noise_mean, noise_std, min_trigger_difference]
 
 
 data = data_base()
-print(best_value(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11]))
+print(best_value(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10], data[11], data[12], data[13], data[14]))
