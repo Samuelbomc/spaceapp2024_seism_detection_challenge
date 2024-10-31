@@ -6,7 +6,7 @@ The implementation of Training_Data.py is pending, we plan to implement in the f
 
 // Proyect Description
 
-The Informed Seism Detector (ISD) is a sophisticated seismic data processing program designed to identify seismic events obscured by various noise sources across Earth, the Moon, and Mars. By locally analyzing the data and transmitting only the relevant information, the ISD optimizes bandwidth usage, which is essential given the vast distances involved in transmitting data from space.
+The Informed Seism Detector (ISD) is a seismic data processing program designed to identify seismic events obscured by various noise sources across Earth, the Moon, and Mars. By locally analyzing the data and transmitting only the relevant information, the ISD optimizes bandwidth usage, which is essential given the vast distances involved in transmitting data from space.
 
 The program adapts its approach based on the origin of the seismic data. For instance, Mars data is analyzed in a frequency range from 0.1 to 9.9 Hz, using shorter windows for Short-Term Average (STA) and Long-Term Average (LTA) measurements (60 and 250 seconds, respectively) with a STA/LTA ratio threshold of 1.5 to indicate potential seismic activity. In contrast, lunar data is processed over a narrower range of 0.1 to 3.2 Hz, using extended STA and LTA windows (100 and 1000 seconds, respectively) due to the unique seismic properties of the Moon.
 
