@@ -4,6 +4,10 @@ To use the program its necessary to install the data folder (Found here https://
 
 The implementation of Training_Data.py is pending, we plan to implement in the future a machine learning algorythm that given large databases of noise (Sounds other than seisms found on celestial bodies surfaces) can then eliminate simmilar behaving patterns on the raw data before its analysis its done.
 
+The following Python libraries are required to run both programs:
+
+Obspy, Scipy, Numpy, Pandas, Datetime, Matplotlib, Glob, OS, and Noisereduce
+
 // Proyect Description
 
 The Informed Seism Detector (ISD) is a seismic data processing program designed to identify seismic events obscured by various noise sources at the Moon and Mars. By locally analyzing the data and transmitting only the relevant information, the ISD optimizes bandwidth usage, which is essential given the vast distances involved in transmitting data from space.
