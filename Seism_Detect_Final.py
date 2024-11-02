@@ -4,7 +4,6 @@ import numpy as np
 from obspy import read
 from scipy import signal
 from matplotlib import cm
-import numpy as np
 import pandas as pd
 import datetime
 import matplotlib.pyplot as plt
