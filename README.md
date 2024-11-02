@@ -14,7 +14,7 @@ The Informed Seism Detector (ISD) is a seismic data processing program designed 
 
 The program adapts its approach based on the origin of the seismic data. For instance, Mars data is analyzed in a frequency range from 0.1 to 9.9 Hz, using shorter windows for Short-Term Average (STA) and Long-Term Average (LTA) measurements (60 and 250 seconds, respectively) with a STA/LTA ratio threshold of 1.5 to indicate potential seismic activity. In contrast, lunar data is processed over a narrower range of 0.1 to 3.2 Hz, using extended STA and LTA windows (100 and 1000 seconds, respectively) due to the unique seismic properties of the Moon.
 
-Once the data is filtered using a bandpass filter, the ISD applies a noise reduction step, using Gaussian filtering and a Short-Term Fourier Transform (STFT) with parameters tailored for each dataset. Noise is further reduced by an adaptive algorithm that identifies outliers based on local mean and standard deviation, replacing them with averaged values.
+Once the data is filtered using a bandpass filter, the ISD applies a noise reduction step, using Gaussian filtering with parameters tailored for each dataset. Noise is further reduced by an adaptive algorithm that identifies outliers based on local mean and standard deviation, replacing them with averaged values.
 
 The STA/LTA algorithm is then applied, detecting seismic events when the STA-to-LTA ratio exceeds the threshold. The ISD also checks event power using a thresholding method to ensure detected events are significant; valid detections are recorded only if the power exceeds a set level. A minimum time gap between detections is enforced to avoid redundant triggers.
 
